@@ -10,7 +10,7 @@ defmodule Blockfrost.Case do
     end
   end
 
-  @spec response(pos_integer(), map()) :: Finch.Response.t()
+  @spec response(pos_integer(), map()) :: HTTPoison.Response.t()
   def response(status, body, opts \\ []) do
     {content_type, encoded_body} =
       case Keyword.get(opts, :encoding, :json) do
@@ -22,8 +22,8 @@ defmodule Blockfrost.Case do
       end
 
     {:ok,
-     %Finch.Response{
-       status: status,
+     %HTTPoison.Response{
+       status_code: status,
        body: encoded_body,
        headers: [{"Content-Type", content_type}]
      }}

@@ -6,8 +6,15 @@ defmodule Blockfrost.HTTPTest do
 
   setup_all do
     start_supervised!({Blockfrost, name: TestNet, api_key: "apikey", network: :cardano_testnet})
-    start_supervised!({Blockfrost, name: PreviewNet, api_key: "apikey", network: :cardano_preview})
-    start_supervised!({Blockfrost, name: PreprodNet, api_key: "apikey", network: :cardano_preprod})
+
+    start_supervised!(
+      {Blockfrost, name: PreviewNet, api_key: "apikey", network: :cardano_preview}
+    )
+
+    start_supervised!(
+      {Blockfrost, name: PreprodNet, api_key: "apikey", network: :cardano_preprod}
+    )
+
     start_supervised!({Blockfrost, name: MainNet, api_key: "apikey", network: :cardano_mainnet})
     :ok
   end
@@ -140,10 +147,10 @@ defmodule Blockfrost.HTTPTest do
       assert {:ok, responses} =
                HTTP.build_and_send(MainNet, :get, "/foo", pagination: %{page: :all, count: 50})
 
-      %Finch.Response{body: first_resp_body} = List.first(responses)
+      %HTTPoison.Response{body: first_resp_body} = List.first(responses)
       assert first_resp_body =~ ~s/["1","1","1"/
 
-      %Finch.Response{body: eleventh_resp_body} = Enum.at(responses, 10)
+      %HTTPoison.Response{body: eleventh_resp_body} = Enum.at(responses, 10)
       assert eleventh_resp_body =~ ~s/["11","11","11"/
     end
   end

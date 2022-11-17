@@ -1,7 +1,7 @@
 defmodule Blockfrost.HTTP do
   @moduledoc """
   HTTP requests to Blockfrost APIs.
-
+  
   This module is not meant to be use directly. Use the higher level modules to do calls
   to the Blockfrost API.
   """
@@ -15,20 +15,20 @@ defmodule Blockfrost.HTTP do
            | :ip_banned
            | :usage_limit_reached
            | :internal_server_error
-           | Finch.Error.t()}
+           | HTTPoison.Error.t()}
 
   @doc """
   Builds a request and sends it.
-
+  
   Supports pagination.
-
+  
   If pagination.page is `:all`, will fetch all pages concurrently, with retries
   according to retry options.  If some page fails to be fetched, the first error
   found will be returned.
-
+  
   If you're fetching all pages, maximum concurrency can be configured by using
   the :max_concurrency option. Default is `10`.
-
+  
   Keeps data in the order requested.
   """
   @spec build_and_send(atom(), atom(), String.t(), Keyword.t()) :: {:ok, term} | {:error, term}
@@ -121,16 +121,16 @@ defmodule Blockfrost.HTTP do
 
   @doc """
   Builds a request to a Blockfrost API
-
+  
   This function only builds the request. You can execute it with `request/3`.
   """
-  @spec build(atom, Finch.Request.method(), binary, map, binary) :: Finch.Request.t()
+  @spec build(atom, HTTPoison.Request.method(), binary, map, binary) :: HTTPoison.Request.t()
   def build(name, method, path, query_params \\ %{}, opts \\ []) do
     config = Blockfrost.config(name)
     path = resolve_path(config, path, query_params)
     headers = resolve_headers(config, opts)
 
-    Finch.build(method, path, headers, opts[:body])
+    %HTTPoison.Request{method: method, url: path, body: opts[:body], headers: headers}
   end
 
   defp resolve_path(%Blockfrost.Config{network_uri: base_uri}, path, query_params) do
@@ -158,29 +158,25 @@ defmodule Blockfrost.HTTP do
 
   @doc """
   Does a request to a Blockfrost API.
-
+  
   Receives the following options:
   - `:retry_enabled?`: whether it should retry failing requests
   - `:retry_max_attempts`: max retry attempts
   - `:retry_interval`: interval between attempts
-
+  
   All these options fall back to the config. If they're not defined there,
   they fall back to default values. See `Blockfrost.Config` for more info.
-
-  For additional options, see `Finch.request/3`
-
+  
+  For additional options, see `HTTPoison.request/3`
+  
   Build requests with `build/4`.
   """
-  @spec request(atom, Finch.Request.t(), Keyword.t()) :: Finch.Response.t()
+  @spec request(atom, HTTPoison.Request.t(), Keyword.t()) :: HTTPoison.Response.t()
   def request(name, request, opts \\ []) do
-    finch = Module.concat(name, Finch)
-    config = Blockfrost.config(name)
-    client = Application.get_env(:blockfrost, :__http_client__, Finch)
-
     fn ->
-      client.request(request, finch, opts)
+      HTTPoison.request(request)
     end
-    |> with_retry(opts, config)
+    |> with_retry(opts, Blockfrost.config(name))
     |> handle_response(opts)
   end
 

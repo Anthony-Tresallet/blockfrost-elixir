@@ -17,15 +17,15 @@ defmodule Blockfrost do
 
   @doc """
   Starts a Blockfrost supervision tree.
-
+  
   **Required options:**
-
+  
   * `:name` - the name of the Blockfrost client. Defaults to `Blockfrost`
   * `:network` - the network for this client. Either `:cardano_mainnet`, `:cardano_preprod`, `:cardano_preview`, `:cardano_testnet` or `:ipfs`
   * `:api_key` - Your Blockfrost API key
-
+  
   **Other options:**
-
+  
   * `:retry_enabled?` - whether it should retry failing requests. Defaults to `true`
   * `:retry_max_attempts` - max retry attempts. Defaults to `5`.
   * `:retry_interval` - interval between attempts, in milliseconds. Defaults to `500`.
@@ -49,7 +49,6 @@ defmodule Blockfrost do
 
     children = [
       {Blockfrost.Config, config},
-      {Finch, name: Module.concat(config.name, Finch)},
       {Task.Supervisor, name: Module.concat(config.name, TaskSupervisor)}
     ]
 

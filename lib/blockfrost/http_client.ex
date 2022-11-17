@@ -1,5 +1,5 @@
 defmodule Blockfrost.HTTPClient do
   @moduledoc false
 
-  @callback request(Finch.Request.t(), atom, Keyword.t()) :: Finch.Response.t()
+  @callback request(HTTPoison.Request.t(), atom, Keyword.t()) :: HTTPoison.Response.t()
 end
