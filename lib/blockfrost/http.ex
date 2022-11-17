@@ -38,66 +38,8 @@ defmodule Blockfrost.HTTP do
         path,
         opts \\ []
       ) do
-    pagination = opts[:pagination] || %{}
-    query_params = opts[:query_params] || %{}
-
-    case pagination do
-      %{page: :all} ->
-        fetch_all_pages(name, method, path, query_params, opts[:body], opts)
-
-      _ ->
-        req = build(name, method, path, Map.merge(pagination, query_params), opts)
-        request(req, opts)
-    end
-  end
-
-  defp fetch_all_pages(name, method, path, query_params, body, opts) do
-    max_concurrency = opts[:max_concurrency] || 10
-
-    fetch_page = fn page ->
-      pagination = %{count: 100, page: page, order: "asc"}
-      req = build(name, method, path, Map.merge(pagination, query_params), body)
-      request(req, opts)
-    end
-
-    do_fetch_all_pages(name, 1..max_concurrency, fetch_page, max_concurrency)
-    |> Enum.reduce_while([], fn {:ok, handled}, acc ->
-      case handled do
-        {:ok, response} ->
-          {:cont, [response | acc]}
-
-        err ->
-          {:halt, err}
-      end
-    end)
-    |> case do
-      responses when is_list(responses) -> {:ok, Enum.reverse(responses)}
-      err -> err
-    end
-  end
-
-  # will stop earlier if some error is not solved by retries
-  defp do_fetch_all_pages(
-         name,
-         %Range{first: first, last: last} = range,
-         fetch_page,
-         max_concurrency,
-         acc \\ []
-       ) do
-    responses =
-      name
-      |> Module.concat(TaskSupervisor)
-      |> Task.Supervisor.async_stream(range, fetch_page,
-        max_concurrency: max_concurrency,
-        ordered: true
-      )
-      |> Enum.to_list()
-
-    next_range = %Range{range | first: last + 1, last: last + (1 + last - first)}
-
-    if should_fetch_more?(responses),
-      do: do_fetch_all_pages(name, next_range, fetch_page, max_concurrency, acc ++ responses),
-      else: acc ++ responses
+    req = build(name, method, path, opts[:body], opts)
+    request(req, opts)
   end
 
   defp should_fetch_more?(responses) do
@@ -125,16 +67,30 @@ defmodule Blockfrost.HTTP do
   This function only builds the request. You can execute it with `request/3`.
   """
   @spec build(atom, HTTPoison.Request.method(), binary, map, binary) :: HTTPoison.Request.t()
-  def build(name, method, path, query_params \\ %{}, opts \\ []) do
+  def build(name, method, path, query_params, opts \\ [body: ""]) do
     config = Blockfrost.config(name)
     path = resolve_path(config, path, query_params)
     headers = resolve_headers(config, opts)
 
-    %HTTPoison.Request{method: method, url: path, body: opts[:body], headers: headers}
+    body =
+      if is_nil(opts[:body]) do
+        ""
+      else
+        opts[:body]
+      end
+
+    %HTTPoison.Request{method: method, url: path, body: body, headers: headers}
   end
 
   defp resolve_path(%Blockfrost.Config{network_uri: base_uri}, path, query_params) do
-    query = URI.encode_query(query_params)
+    query =
+      URI.encode_query(
+        if is_nil(query_params) do
+          %{}
+        else
+          query_params
+        end
+      )
 
     %{base_uri | path: base_uri.path <> path, query: query}
   end
@@ -171,42 +127,7 @@ defmodule Blockfrost.HTTP do
   
   Build requests with `build/4`.
   """
-  @spec request(HTTPoison.Request.t(), Keyword.t()) :: HTTPoison.Response.t()
-  def request(request, opts \\ []) do
-    fn ->
-      HTTPoison.request(request)
-    end
-    |> handle_response(opts)
+  def request(request, _opts \\ []) do
+    HTTPoison.request(request)
   end
-
-  defp handle_response({:ok, response}, opts) do
-    if opts[:skip_error_handling?] do
-      {:ok, response}
-    else
-      case response do
-        %{status: status} when status in 199..399 ->
-          {:ok, response}
-
-        %{status: 400} ->
-          {:error, :bad_request}
-
-        %{status: 403} ->
-          {:error, :unauthenticated}
-
-        %{status: 404} ->
-          {:error, :not_found}
-
-        %{status: 418} ->
-          {:error, :ip_banned}
-
-        %{status: 429} ->
-          {:error, :usage_limit_reached}
-
-        %{status: 500} ->
-          {:error, :internal_server_error}
-      end
-    end
-  end
-
-  defp handle_response({:error, %{reason: reason}}, _opts), do: {:error, reason}
 end
