@@ -47,7 +47,7 @@ defmodule Blockfrost.HTTP do
 
       _ ->
         req = build(name, method, path, Map.merge(pagination, query_params), opts)
-        request(name, req, opts)
+        request(req, opts)
     end
   end
 
@@ -57,7 +57,7 @@ defmodule Blockfrost.HTTP do
     fetch_page = fn page ->
       pagination = %{count: 100, page: page, order: "asc"}
       req = build(name, method, path, Map.merge(pagination, query_params), body)
-      request(name, req, opts)
+      request(req, opts)
     end
 
     do_fetch_all_pages(name, 1..max_concurrency, fetch_page, max_concurrency)
@@ -171,36 +171,12 @@ defmodule Blockfrost.HTTP do
   
   Build requests with `build/4`.
   """
-  @spec request(atom, HTTPoison.Request.t(), Keyword.t()) :: HTTPoison.Response.t()
-  def request(name, request, opts \\ []) do
+  @spec request(HTTPoison.Request.t(), Keyword.t()) :: HTTPoison.Response.t()
+  def request(request, opts \\ []) do
     fn ->
       HTTPoison.request(request)
     end
-    |> with_retry(opts, Blockfrost.config(name))
     |> handle_response(opts)
-  end
-
-  defp with_retry(fun, opts, config, attempt \\ 1) do
-    enabled? = opts[:retry_enabled?] || config.retry_enabled?
-    max_attempts = opts[:retry_max_attempts] || config.retry_max_attempts
-    interval = opts[:retry_interval] || config.retry_interval
-
-    if enabled? and attempt < max_attempts do
-      case fun.() do
-        {:ok, %{status: status}} when status in @retryable_statuses ->
-          :timer.sleep(interval)
-          with_retry(fun, opts, config, attempt + 1)
-
-        {:ok, response} ->
-          {:ok, response}
-
-        {:error, _} ->
-          :timer.sleep(interval)
-          with_retry(fun, opts, config, attempt + 1)
-      end
-    else
-      fun.()
-    end
   end
 
   defp handle_response({:ok, response}, opts) do
@@ -232,5 +208,5 @@ defmodule Blockfrost.HTTP do
     end
   end
 
-  defp handle_response(err, _opts), do: err
+  defp handle_response({:error, %{reason: reason}}, _opts), do: {:error, reason}
 end
