@@ -127,7 +127,39 @@ defmodule Blockfrost.HTTP do
   
   Build requests with `build/4`.
   """
-  def request(request, _opts \\ []) do
+  def request(request, opts \\ []) do
     HTTPoison.request(request)
+    |> handle_response(opts)
   end
+
+  defp handle_response({:ok, response}, opts) do
+    if opts[:skip_error_handling?] do
+      {:ok, response}
+    else
+      case response do
+        %{status_code: status} when status in 199..399 ->
+          {:ok, response}
+
+        %{status_code: 400} ->
+          {:error, :bad_request}
+
+        %{status_code: 403} ->
+          {:error, :unauthenticated}
+
+        %{status_code: 404} ->
+          {:error, :not_found}
+
+        %{status_code: 418} ->
+          {:error, :ip_banned}
+
+        %{status_code: 429} ->
+          {:error, :usage_limit_reached}
+
+        %{status_code: 500} ->
+          {:error, :internal_server_error}
+      end
+    end
+  end
+
+  defp handle_response({:error, %{reason: reason}}, _opts), do: {:error, reason}
 end
